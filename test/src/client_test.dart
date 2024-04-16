@@ -39,7 +39,16 @@ void main() {
       }),
     );
 
-    expect(client.connect(), throwsA(isA<Exception>()));
+    expect(client.connect(), throwsA(isA<InvalidResponseHeaderException>()));
+  });
+
+  test('exception should throw on a non-200 response', () async {
+    var client = SseClient(
+      http.Request('GET', Uri.parse('http://example.com/subscribe')),
+      httpClientProvider: () => MockClient((request) => Future.value(http.Response('Not found', 404))),
+    );
+
+    expect(client.connect(), throwsA(isA<InvalidResponseCodeException>()));
   });
 
   test('connect more than once', () async {
@@ -71,7 +80,7 @@ void main() {
     );
 
     expect(await client.connect(), isA<Stream<MessageEvent>>());
-    await expectLater(client.connect(), throwsA(isA<Exception>()));
+    await expectLater(client.connect(), throwsA(isA<ConnectionStateException>()));
   });
 
   test('should emit received event', () async {

@@ -72,7 +72,10 @@ class SseClient {
   ConnectionState get state => _state;
 
   SseClient(this._request,
-      {this.httpClientProvider, this.timeout = _defaultTimeout, this.onConnected, this.setContentTypeHeader = true})
+      {this.httpClientProvider,
+      this.timeout = _defaultTimeout,
+      this.onConnected,
+      this.setContentTypeHeader = true})
       : assert(!_request.finalized) {
     _splitter = StreamSplitter(_request.finalize());
   }
@@ -104,11 +107,15 @@ class SseClient {
       ..contentLength = _request.contentLength
       ..followRedirects = _request.followRedirects
       ..headers.addAll(_request.headers)
-      ..headers.addAll(setContentTypeHeader ? {'Accept': 'text/event-stream'} : {})
+      ..headers
+          .addAll(setContentTypeHeader ? {'Accept': 'text/event-stream'} : {})
       ..maxRedirects = _request.maxRedirects
       ..persistentConnection = _request.persistentConnection;
 
-    body.listen(request.sink.add, onError: request.sink.addError, onDone: request.sink.close, cancelOnError: true);
+    body.listen(request.sink.add,
+        onError: request.sink.addError,
+        onDone: request.sink.close,
+        cancelOnError: true);
 
     return request;
   }
@@ -118,7 +125,8 @@ class SseClient {
   /// You cannot call this method if the client is already connected or connecting, or an exception will be thrown.
   Future<Stream<MessageEvent>> connect() async {
     if (_state != ConnectionState.disconnected) {
-      throw Exception('Already connected or connecting to SSE');
+      throw ConnectionStateException(
+          'Already connected or connecting to SSE', _state);
     }
 
     var streamController = StreamController<MessageEvent>();
@@ -138,12 +146,17 @@ class SseClient {
 
       /// [spec] if res's status is not 200, or if res's `Content-Type` is not `text/event-stream`, then fail the connection.
       if (response.statusCode != 200) {
-        throw Exception('Failed subscribing to SSE - invalid response code ${response.statusCode}');
+        throw InvalidResponseCodeException(
+            'Failed subscribing to SSE - invalid response code ${response.statusCode}',
+            response);
       }
 
       if (!response.headers.containsKey('content-type') ||
-          (response.headers['content-type']!.split(';')[0] != 'text/event-stream')) {
-        throw Exception('Failed subscribing to SSE - unexpected Content-Type ${response.headers['content-type']}');
+          (response.headers['content-type']!.split(';')[0] !=
+              'text/event-stream')) {
+        throw InvalidResponseHeaderException(
+            'Failed subscribing to SSE - unexpected Content-Type ${response.headers['content-type']}',
+            response);
       }
     } catch (error) {
       rethrow;
@@ -151,8 +164,10 @@ class SseClient {
 
     if (_state != ConnectionState.connecting) {
       // This can happen if disconnect() is called while waiting for the response
-      throw Exception(
-          'Failed subscribing to SSE - connection is fine but client\'s connection state is not "connecting"');
+      throw ConnectionStateException(
+          'Failed subscribing to SSE - connection is fine but client\'s connection state is not "connecting". '
+          'This can happen when user `disconnect()` is called before a connection response is received.',
+          _state);
     }
 
     _state = ConnectionState.connected;
@@ -160,7 +175,10 @@ class SseClient {
     /// "[spec]" refers to https://html.spec.whatwg.org/multipage/server-sent-events.html
     _EventBuffer? eventBuffer;
     try {
-      response.stream.transform(const Utf8Decoder()).transform(const LineSplitter()).listen((dataLine) {
+      response.stream
+          .transform(const Utf8Decoder())
+          .transform(const LineSplitter())
+          .listen((dataLine) {
         if (dataLine.isEmpty) {
           /// [spec] If the line is empty (a blank line), Dispatch the event.
           if (streamController.isClosed) {
@@ -300,7 +318,7 @@ typedef ReconnectStrategyCallback = RetryStrategy? Function(
     StackTrace stacktrace);
 
 /// A client that will automatically reconnect to the server when the connection is lost.
-/// This is separated from [SseClient] because of the different behavior or the [connect] method.
+/// This is separated from [SseClient] because of the different behavior of the [connect] method.
 /// See [connect] for more information.
 class AutoReconnectSseClient extends SseClient {
   /// The number of times a reconnection should be tried.
@@ -336,7 +354,7 @@ class AutoReconnectSseClient extends SseClient {
   /// A factory method to create an [AutoReconnectSseClient] instance with the default retry strategy.
   ///
   /// The constructor parameters in this factory method are the same as [SseClient], so it can be seen as a drop-in
-  /// replacement of [SseClient] constructor, with added reconnection functionality. The "default" behavior are as
+  /// replacement of [SseClient] constructor with added auto reconnection functionality. The "default" behavior are as
   /// follows:
   /// 1. It will try to reconnect for unlimited time, when a connection error or a stream error is emitted, or when the
   ///    server closes the connection prematurely.
@@ -346,7 +364,7 @@ class AutoReconnectSseClient extends SseClient {
   ///
   /// You should still be aware of the difference on [connect] method's behavior.
   ///
-  /// Constructor the [AutoReconnectSseClient] instance manually if you need more control over the retry strategy and
+  /// Construct the [AutoReconnectSseClient] instance manually if you need more control over the retry strategy and
   /// the number of retries.
   AutoReconnectSseClient.defaultStrategy(super._request,
       {super.httpClientProvider,
@@ -362,7 +380,8 @@ class AutoReconnectSseClient extends SseClient {
   @override
   http.StreamedRequest _copyRequest() {
     var copiedRequest = super._copyRequest();
-    if ((_lastRetryStrategy?.appendLastIdHeader ?? false) && lastEventId != null) {
+    if ((_lastRetryStrategy?.appendLastIdHeader ?? false) &&
+        lastEventId != null) {
       copiedRequest.headers['Last-Event-ID'] = lastEventId!;
     }
     return copiedRequest;
@@ -370,7 +389,6 @@ class AutoReconnectSseClient extends SseClient {
 
   @override
   void close() {
-    print('Disconnecting');
     _outerStreamController?.close();
     super.close();
   }
@@ -384,7 +402,8 @@ class AutoReconnectSseClient extends SseClient {
   @override
   Future<Stream<MessageEvent>> connect() async {
     if (_state != ConnectionState.disconnected) {
-      throw Exception('Already connected or connecting to SSE');
+      throw ConnectionStateException(
+          'Already connected or connecting to SSE', _state);
     }
 
     _outerStreamController = StreamController<MessageEvent>();
@@ -401,7 +420,8 @@ class AutoReconnectSseClient extends SseClient {
 
       // Propagate the events to the outer stream.
       await for (final event in innerStream) {
-        if (_outerStreamController == null || _outerStreamController!.isClosed) {
+        if (_outerStreamController == null ||
+            _outerStreamController!.isClosed) {
           return;
         }
         _outerStreamController!.add(event);
@@ -452,8 +472,10 @@ class AutoReconnectSseClient extends SseClient {
 
 const _defaultTimeout = const Duration(seconds: 15);
 
-final _defaultStrategyCallback =
-    (ConnectionError errorType, int retryCount, int? reconnectionTime, Object obj, StackTrace stack) => RetryStrategy(
-          delay: Duration(milliseconds: reconnectionTime ?? 500) * math.pow(1.5, math.min(10, retryCount)),
-          appendLastIdHeader: true,
-        );
+final _defaultStrategyCallback = (ConnectionError errorType, int retryCount,
+        int? reconnectionTime, Object obj, StackTrace stack) =>
+    RetryStrategy(
+      delay: Duration(milliseconds: reconnectionTime ?? 500) *
+          math.pow(1.5, math.min(10, retryCount)),
+      appendLastIdHeader: true,
+    );

@@ -34,9 +34,9 @@ void main() {
         expect(retryCount, 3);
       }),
       onError: (errorType, retryCount, reconnectionTime, error, stacktrace) => RetryStrategy(
-        delay: Duration.zero,
-        appendLastIdHeader: false,
-      ),
+          delay: Duration.zero,
+          appendLastIdHeader: false,
+        ),
     ).connect();
   });
 

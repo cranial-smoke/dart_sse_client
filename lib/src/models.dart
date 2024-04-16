@@ -22,7 +22,10 @@ class MessageEvent {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
-    return other is MessageEvent && other.id == id && other.event == event && other.data == data;
+    return other is MessageEvent &&
+        other.id == id &&
+        other.event == event &&
+        other.data == data;
   }
 
   @override
