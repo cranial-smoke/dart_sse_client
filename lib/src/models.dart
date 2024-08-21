@@ -1,3 +1,5 @@
+import 'package:http/http.dart' as http;
+
 /// Message event dispatched by the SSE client.
 class MessageEvent {
   /// The last event id. It can be an empty string.
@@ -40,8 +42,12 @@ class RetryStrategy {
   /// Whether to append the `Last-Event-ID` header to the request.
   final bool appendLastIdHeader;
 
+  /// Use this request as basis for next connection request.
+  final http.BaseRequest? baseRequest;
+
   const RetryStrategy({
     required this.delay,
     this.appendLastIdHeader = true,
+    this.baseRequest,
   });
 }

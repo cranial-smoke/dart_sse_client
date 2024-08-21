@@ -50,7 +50,7 @@ class SseClient {
   /// When a connection is initialized the request will be used as a base and copied to a new one, with the `Accept`
   /// header set to `text/event-stream` if [setContentTypeHeader] is `true`. This class will not modify other
   /// header parameters.
-  final http.BaseRequest _request;
+  http.BaseRequest _request;
 
   /// Whether to set the `Accept` header to `text/event-stream` automatically.
   /// The original `Accept` header (if defined) will be overwritten when this is set to `true`.
@@ -379,6 +379,9 @@ class AutoReconnectSseClient extends SseClient {
 
   @override
   http.StreamedRequest _copyRequest() {
+    if (_lastRetryStrategy?.baseRequest != null) {
+      super._request = _lastRetryStrategy!.baseRequest!;
+    }
     var copiedRequest = super._copyRequest();
     if ((_lastRetryStrategy?.appendLastIdHeader ?? false) &&
         lastEventId != null) {
